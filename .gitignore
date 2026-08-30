@@ -1,0 +1,16 @@
+.gradle/
+.idea/
+.kotlin/
+**/build/
+local.properties
+keystore.properties
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example
+proxy/node_modules/
+**/bin/
+**/obj/
+windows/**/publish/
+windows/**/Payload/
