@@ -67,6 +67,8 @@
                 <WrapPanel>
                     <TextBox Width="130" Text="{Binding NewSymbol, UpdateSourceTrigger=PropertyChanged}" ToolTip="Ticker symbol"/>
                     <Button Content="Add symbol" Click="AddSymbol_Click"/>
+                    <Button Content="Import Fidelity" Click="ImportFidelity_Click"/>
+                    <Button Content="Add Coinbase" Click="ImportCoinbase_Click"/>
                     <ComboBox Width="115" ItemsSource="{Binding Horizons}" SelectedItem="{Binding SelectedHorizon}"/>
                     <Button Content="Refresh all" Click="Refresh_Click"/>
                     <Button Content="Delete selected" Background="#9B3D35" Click="Delete_Click"/>
@@ -109,6 +111,10 @@
                     <DataGridTextColumn Header="Local model" Binding="{Binding ModelResult}" ElementStyle="{StaticResource ModelCell}" IsReadOnly="True" Width="135"/>
                     <DataGridTextColumn Header="Quantity" Binding="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" Width="82"/>
                     <DataGridTextColumn Header="Avg cost" Binding="{Binding AverageCost, UpdateSourceTrigger=PropertyChanged}" Width="82"/>
+                    <DataGridTextColumn Header="Live value" Binding="{Binding HoldingValue}" IsReadOnly="True" Width="95"/>
+                    <DataGridTextColumn Header="Est. gain/loss" Binding="{Binding EstimatedGainLoss}" IsReadOnly="True" Width="105"/>
+                    <DataGridTextColumn Header="Rel. volume" Binding="{Binding RelativeVolume}" IsReadOnly="True" Width="90"/>
+                    <DataGridTextColumn Header="Holding source" Binding="{Binding HoldingSource}" IsReadOnly="True" Width="145"/>
                 </DataGrid.Columns>
             </DataGrid>
             <Border Grid.Column="2" Background="White" BorderBrush="#D8DDD9" BorderThickness="1" CornerRadius="5">

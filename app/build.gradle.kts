@@ -22,8 +22,8 @@ android {
         applicationId = "com.wolffentp.stockanalyzer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6.0"
+        versionCode = 8
+        versionName = "1.7.0"
         buildConfigField("double", "POSITIVE_THRESHOLD", positiveThreshold.toString())
         buildConfigField("double", "NEGATIVE_THRESHOLD", negativeThreshold.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

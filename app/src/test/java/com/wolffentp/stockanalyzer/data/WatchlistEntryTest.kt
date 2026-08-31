@@ -15,6 +15,7 @@ class WatchlistEntryTest {
             "MSFT",
             quantity = 12.5,
             averageCost = 310.75,
+            holdingSource = FIDELITY_CSV_SOURCE,
             lastOvernight = StoredSessionSnapshot(320.0, 1.5, 0.47),
             lastAfterHours = StoredSessionSnapshot(321.0, 2.5, 0.78),
         )

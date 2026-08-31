@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.wolffentp.stockanalyzer.BuildConfig
 import com.wolffentp.stockanalyzer.data.MarketAnalysisRepository
 import com.wolffentp.stockanalyzer.data.MarketDataException
+import com.wolffentp.stockanalyzer.data.COINBASE_CSV_SOURCE
+import com.wolffentp.stockanalyzer.data.CoinbaseCsvImporter
+import com.wolffentp.stockanalyzer.data.FIDELITY_CSV_SOURCE
+import com.wolffentp.stockanalyzer.data.FidelityCsvImporter
 import com.wolffentp.stockanalyzer.data.ModelReview
 import com.wolffentp.stockanalyzer.data.ModelSettings
 import com.wolffentp.stockanalyzer.data.ModelSettingsStore
@@ -22,6 +26,7 @@ import com.wolffentp.stockanalyzer.domain.Horizon
 import com.wolffentp.stockanalyzer.domain.HoldingInputParser
 import com.wolffentp.stockanalyzer.domain.StockMovementAnalyzer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.time.Instant
@@ -38,6 +44,7 @@ data class StockRowState(
     val symbol: String,
     val quantity: Double? = null,
     val averageCost: Double? = null,
+    val holdingSource: String? = null,
     val analysis: AnalysisResult? = null,
     val lastOvernight: StoredSessionSnapshot? = null,
     val lastAfterHours: StoredSessionSnapshot? = null,
@@ -61,6 +68,7 @@ data class StockUiState(
     val endpointOptions: List<String> = DEFAULT_ENDPOINT_OPTIONS,
     val modelOptions: List<String> = DEFAULT_MODEL_OPTIONS,
     val modelStatus: String? = null,
+    val importStatus: String? = null,
 )
 
 class StockViewModel @JvmOverloads constructor(
@@ -140,7 +148,7 @@ class StockViewModel @JvmOverloads constructor(
         val holding = HoldingInputParser.parse(quantityText, averageCostText) ?: return false
         mutableState.update { state ->
             state.copy(rows = state.rows.map { row ->
-                if (row.symbol == symbol) row.copy(quantity = holding.quantity, averageCost = holding.averageCost) else row
+                if (row.symbol == symbol) row.copy(quantity = holding.quantity, averageCost = holding.averageCost, holdingSource = null) else row
             })
         }
         persistWatchlist()
@@ -150,10 +158,90 @@ class StockViewModel @JvmOverloads constructor(
     fun clearHolding(symbol: String) {
         mutableState.update { state ->
             state.copy(rows = state.rows.map { row ->
-                if (row.symbol == symbol) row.copy(quantity = null, averageCost = null) else row
+                if (row.symbol == symbol) row.copy(quantity = null, averageCost = null, holdingSource = null) else row
             })
         }
         persistWatchlist()
+    }
+
+    fun importCoinbaseCsv(csv: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.Default) { CoinbaseCsvImporter.import(csv) } }
+                .onSuccess { result ->
+                    val importedBySymbol = result.holdings.associateBy { it.symbol }
+                    mutableState.update { state ->
+                        val retained = state.rows.filterNot { row ->
+                            row.holdingSource == COINBASE_CSV_SOURCE && row.symbol !in importedBySymbol
+                        }.map { row ->
+                            importedBySymbol[row.symbol]?.takeUnless { row.holdingSource == FIDELITY_CSV_SOURCE }?.let { estimate ->
+                                row.copy(
+                                    quantity = estimate.quantity,
+                                    averageCost = estimate.averageCost,
+                                    holdingSource = COINBASE_CSV_SOURCE,
+                                )
+                            } ?: row
+                        }
+                        val existingSymbols = retained.mapTo(mutableSetOf()) { it.symbol }
+                        val added = result.holdings.filterNot { it.symbol in existingSymbols }.map { estimate ->
+                            StockRowState(
+                                symbol = estimate.symbol,
+                                quantity = estimate.quantity,
+                                averageCost = estimate.averageCost,
+                                holdingSource = COINBASE_CSV_SOURCE,
+                            )
+                        }
+                        state.copy(
+                            rows = retained + added,
+                            importStatus = "Imported ${result.holdings.size} estimated Coinbase holding(s) from ${result.transactionCount} transaction(s).",
+                        )
+                    }
+                    persistWatchlist()
+                    refresh()
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(importStatus = error.message ?: "Could not import the Coinbase CSV.") }
+                }
+        }
+    }
+
+    fun importFidelityCsv(csv: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.Default) { FidelityCsvImporter.import(csv) } }
+                .onSuccess { result ->
+                    val importedBySymbol = result.holdings.associateBy { it.symbol }
+                    mutableState.update { state ->
+                        val retained = state.rows.filterNot { row ->
+                            row.holdingSource == FIDELITY_CSV_SOURCE && row.symbol !in importedBySymbol
+                        }.map { row ->
+                            importedBySymbol[row.symbol]?.let { estimate ->
+                                row.copy(
+                                    quantity = estimate.quantity,
+                                    averageCost = estimate.averageCost,
+                                    holdingSource = FIDELITY_CSV_SOURCE,
+                                )
+                            } ?: row
+                        }
+                        val existingSymbols = retained.mapTo(mutableSetOf()) { it.symbol }
+                        val added = result.holdings.filterNot { it.symbol in existingSymbols }.map { estimate ->
+                            StockRowState(
+                                symbol = estimate.symbol,
+                                quantity = estimate.quantity,
+                                averageCost = estimate.averageCost,
+                                holdingSource = FIDELITY_CSV_SOURCE,
+                            )
+                        }
+                        state.copy(
+                            rows = retained + added,
+                            importStatus = "Imported ${result.holdings.size} Fidelity symbol(s) from ${result.positionCount} position(s).",
+                        )
+                    }
+                    persistWatchlist()
+                    refresh()
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(importStatus = error.message ?: "Could not import the Fidelity CSV.") }
+                }
+        }
     }
 
     fun select(symbol: String?) { mutableState.update { it.copy(selectedSymbol = symbol) } }
@@ -469,6 +557,7 @@ private fun WatchlistEntry.toRowState() = StockRowState(
     symbol = symbol,
     quantity = quantity,
     averageCost = averageCost,
+    holdingSource = holdingSource,
     lastOvernight = lastOvernight,
     lastAfterHours = lastAfterHours,
 )
@@ -477,6 +566,7 @@ private fun StockRowState.toWatchlistEntry() = WatchlistEntry(
     symbol = symbol,
     quantity = quantity,
     averageCost = averageCost,
+    holdingSource = holdingSource,
     lastOvernight = lastOvernight,
     lastAfterHours = lastAfterHours,
 )

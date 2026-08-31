@@ -28,7 +28,12 @@ public partial class App : Application
 			Shutdown();
 			return;
 		}
-		new MainWindow().Show();
+		string? ArgumentValue(string name)
+		{
+			var index = Array.FindIndex(eventArgs.Args, value => string.Equals(value, name, StringComparison.OrdinalIgnoreCase));
+			return index >= 0 && index + 1 < eventArgs.Args.Length ? eventArgs.Args[index + 1] : null;
+		}
+		new MainWindow(ArgumentValue("--import-fidelity"), ArgumentValue("--import-coinbase")).Show();
 	}
 
 	private static void Install(bool silent)

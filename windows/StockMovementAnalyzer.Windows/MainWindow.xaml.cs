@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -8,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.Win32;
 
 namespace StockMovementAnalyzer.Windows;
 
@@ -27,7 +29,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool useLocalModel = true;
     private StockRow? selectedRow;
 
-    public MainWindow()
+    public MainWindow(string? fidelityImportPath = null, string? coinbaseImportPath = null)
     {
         InitializeComponent();
         DataContext = this;
@@ -49,9 +51,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 row.LastOvernightPercent,
                 row.LastAfterHoursPrice,
                 row.LastAfterHoursChange,
-                row.LastAfterHoursPercent));
+                row.LastAfterHoursPercent,
+                row.HoldingSource));
         }
-        Loaded += async (_, _) => { await DiscoverModelsAsync(false); await RefreshAsync(); refreshTimer.Start(); };
+        Loaded += async (_, _) =>
+        {
+            await DiscoverModelsAsync(false);
+            if (!string.IsNullOrWhiteSpace(fidelityImportPath)) ImportFidelityFile(fidelityImportPath);
+            if (!string.IsNullOrWhiteSpace(coinbaseImportPath)) ImportCoinbaseFile(coinbaseImportPath);
+            await RefreshAsync();
+            refreshTimer.Start();
+        };
         refreshTimer.Tick += async (_, _) => await RefreshAsync();
         Closing += (_, _) => { refreshTimer.Stop(); lifetime.Cancel(); Save(); httpClient.Dispose(); };
     }
@@ -81,6 +91,64 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAsync();
+    private async void ImportFidelity_Click(object sender, RoutedEventArgs e)
+    {
+        var path = SelectCsvFile("Import Fidelity positions");
+        if (path is null) return;
+        try { ImportFidelityFile(path); await RefreshAsync(); }
+        catch (Exception error) { ShowImportError(error, "Fidelity CSV import"); }
+    }
+
+    private async void ImportCoinbase_Click(object sender, RoutedEventArgs e)
+    {
+        var path = SelectCsvFile("Import Coinbase transaction history");
+        if (path is null) return;
+        try { ImportCoinbaseFile(path); await RefreshAsync(); }
+        catch (Exception error) { ShowImportError(error, "Coinbase CSV import"); }
+    }
+
+    private string? SelectCsvFile(string title)
+    {
+        var dialog = new OpenFileDialog { Title = title, Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*", CheckFileExists = true };
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
+    }
+
+    private void ImportFidelityFile(string path)
+    {
+        var result = FidelityCsvImporter.Import(File.ReadAllText(path));
+        var imported = result.Holdings.ToDictionary(item => item.Symbol, StringComparer.OrdinalIgnoreCase);
+        foreach (var row in Rows.Where(row => row.HoldingSource == FidelityCsvImporter.Source && !imported.ContainsKey(row.Symbol)).ToList()) Rows.Remove(row);
+        foreach (var estimate in result.Holdings)
+        {
+            var row = Rows.FirstOrDefault(item => string.Equals(item.Symbol, estimate.Symbol, StringComparison.OrdinalIgnoreCase));
+            if (row is null) Rows.Add(new StockRow(estimate.Symbol, estimate.Quantity, estimate.AverageCost, holdingSource: FidelityCsvImporter.Source));
+            else { row.Quantity = estimate.Quantity; row.AverageCost = estimate.AverageCost; row.HoldingSource = FidelityCsvImporter.Source; }
+        }
+        Save();
+        Status = $"Imported {result.Holdings.Count} Fidelity symbol(s) from {result.PositionCount} position(s).";
+    }
+
+    private void ImportCoinbaseFile(string path)
+    {
+        var result = CoinbaseCsvImporter.Import(File.ReadAllText(path));
+        var imported = result.Holdings.ToDictionary(item => item.Symbol, StringComparer.OrdinalIgnoreCase);
+        foreach (var row in Rows.Where(row => row.HoldingSource == CoinbaseCsvImporter.Source && !imported.ContainsKey(row.Symbol)).ToList()) Rows.Remove(row);
+        foreach (var estimate in result.Holdings)
+        {
+            var row = Rows.FirstOrDefault(item => string.Equals(item.Symbol, estimate.Symbol, StringComparison.OrdinalIgnoreCase));
+            if (row?.HoldingSource == FidelityCsvImporter.Source) continue;
+            if (row is null) Rows.Add(new StockRow(estimate.Symbol, estimate.Quantity, estimate.AverageCost, holdingSource: CoinbaseCsvImporter.Source));
+            else { row.Quantity = estimate.Quantity; row.AverageCost = estimate.AverageCost; row.HoldingSource = CoinbaseCsvImporter.Source; }
+        }
+        Save();
+        Status = $"Added or updated {result.Holdings.Count} Coinbase symbol(s) from {result.TransactionCount} transaction(s).";
+    }
+
+    private void ShowImportError(Exception error, string title)
+    {
+        Status = error.Message;
+        MessageBox.Show(error.Message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
     private async void DiscoverModels_Click(object sender, RoutedEventArgs e) => await DiscoverModelsAsync(true);
     private void FindEndpoints_Click(object sender, RoutedEventArgs e)
     {
@@ -217,7 +285,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             row.LastOvernightPercent,
             row.LastAfterHoursPrice,
             row.LastAfterHoursChange,
-            row.LastAfterHoursPercent)).ToList()));
+            row.LastAfterHoursPercent,
+            row.HoldingSource)).ToList()));
 
     private static string NormalizeRequestedModel(string model)
     {
@@ -243,18 +312,21 @@ public sealed class StockRow(
     double? savedOvernightPercent = null,
     double? savedAfterHoursPrice = null,
     double? savedAfterHoursChange = null,
-    double? savedAfterHoursPercent = null) : INotifyPropertyChanged
+    double? savedAfterHoursPercent = null,
+    string? holdingSource = null) : INotifyPropertyChanged
 {
     private string price = "-", extendedSession = "-", overnightGrid = "Unavailable", preMarketGrid = "Unavailable", afterHoursGrid = "Unavailable", technical = "-", technicalRange = "-", confidence = "-", modelResult = "-", modelRationale = "Waiting";
+    private string holdingValue = "-", estimatedGainLoss = "-", relativeVolume = "-";
     private string technicalSummary = "Analysis has not refreshed yet.", sourceDetails = "Not available.", indicatorDetails = "Not calculated.";
     private string signalDetails = "Not calculated.", newsDetails = "No news evidence loaded.", modelDetails = "Local model review pending.";
     private string warningDetails = "None reported.", finalReason = "Analysis has not refreshed yet.";
     private Brush technicalBrush = DirectionBrushes.Neutral, overnightBrush = DirectionBrushes.Neutral, preMarketBrush = DirectionBrushes.Neutral, modelBrush = DirectionBrushes.Neutral;
     private Brush priceFlashBrush = DirectionBrushes.Transparent, overnightFlashBrush = DirectionBrushes.Transparent, preMarketFlashBrush = DirectionBrushes.Transparent, afterHoursFlashBrush = DirectionBrushes.Transparent;
-    private double? previousPrice, previousOvernightPrice, previousPreMarketPrice, previousAfterHoursPrice;
+    private double? currentPrice, previousPrice, previousOvernightPrice, previousPreMarketPrice, previousAfterHoursPrice;
     private SessionValues? lastOvernight = RestoreSession(savedOvernightPrice, savedOvernightChange, savedOvernightPercent);
     private SessionValues? lastAfterHours = RestoreSession(savedAfterHoursPrice, savedAfterHoursChange, savedAfterHoursPercent);
     private decimal? quantity = quantity, averageCost = averageCost;
+    private string? holdingSource = holdingSource;
     public string Symbol { get; } = symbol;
     public string Price { get => price; private set => Set(ref price, value); }
     public string ExtendedSession { get => extendedSession; private set => Set(ref extendedSession, value); }
@@ -266,6 +338,9 @@ public sealed class StockRow(
     public string Confidence { get => confidence; private set => Set(ref confidence, value); }
     public string ModelResult { get => modelResult; private set => Set(ref modelResult, value); }
     public string ModelRationale { get => modelRationale; private set => Set(ref modelRationale, value); }
+    public string HoldingValue { get => holdingValue; private set => Set(ref holdingValue, value); }
+    public string EstimatedGainLoss { get => estimatedGainLoss; private set => Set(ref estimatedGainLoss, value); }
+    public string RelativeVolume { get => relativeVolume; private set => Set(ref relativeVolume, value); }
     public string TechnicalSummary { get => technicalSummary; private set => Set(ref technicalSummary, value); }
     public string SourceDetails { get => sourceDetails; private set => Set(ref sourceDetails, value); }
     public string IndicatorDetails { get => indicatorDetails; private set => Set(ref indicatorDetails, value); }
@@ -282,8 +357,9 @@ public sealed class StockRow(
     public Brush OvernightFlashBrush { get => overnightFlashBrush; private set => Set(ref overnightFlashBrush, value); }
     public Brush PreMarketFlashBrush { get => preMarketFlashBrush; private set => Set(ref preMarketFlashBrush, value); }
     public Brush AfterHoursFlashBrush { get => afterHoursFlashBrush; private set => Set(ref afterHoursFlashBrush, value); }
-    public decimal? Quantity { get => quantity; set => Set(ref quantity, value); }
-    public decimal? AverageCost { get => averageCost; set => Set(ref averageCost, value); }
+    public decimal? Quantity { get => quantity; set { Set(ref quantity, value); HoldingSource = null; UpdateHoldingMetrics(); } }
+    public decimal? AverageCost { get => averageCost; set { Set(ref averageCost, value); HoldingSource = null; UpdateHoldingMetrics(); } }
+    public string? HoldingSource { get => holdingSource; set => Set(ref holdingSource, value); }
     public double? LastOvernightPrice => lastOvernight?.Price;
     public double? LastOvernightChange => lastOvernight?.Change;
     public double? LastOvernightPercent => lastOvernight?.Percent;
@@ -300,6 +376,8 @@ public sealed class StockRow(
         UpdateFlash(SessionFlashValue(value.Quote, value.Quote?.PreMarketPrice, value.Quote?.PreMarketChange), ref previousPreMarketPrice, brush => PreMarketFlashBrush = brush);
         UpdateFlash(afterHours?.Price, ref previousAfterHoursPrice, brush => AfterHoursFlashBrush = brush);
         Price = value.Quote?.Price.ToString("C2") ?? "Unavailable";
+        currentPrice = value.Quote?.Price;
+        UpdateHoldingMetrics();
         ExtendedSession = ExtendedSessionSummary(value.Quote, afterHours);
         OvernightGrid = SessionGridText(overnight?.Price, overnight?.Change, overnight?.Percent, null);
         OvernightBrush = DirectionBrushes.ForSessionChange(overnight?.Change);
@@ -316,6 +394,7 @@ public sealed class StockRow(
         SourceDetails = $"Provider: {value.Provider}\nRetrieved: {value.RetrievedAt.LocalDateTime:g}\nLatest source: {value.LastDataTimestamp?.LocalDateTime:g}\nSource age: {value.SourceAgeMinutes?.ToString() ?? "Unavailable"} minutes\nCandle interval: {value.CandleIntervalMinutes} minute(s)\nLast overnight: {OvernightGrid}\nPre/After market: {ExtendedSession}\nLatest quote: {Price}";
         IndicatorDetails = value.Indicators is null ? "Indicators were not calculated because live-data validation failed." :
             $"Momentum: {Display(value.Indicators.MomentumPercent)}%\nShort moving average: {Display(value.Indicators.ShortMovingAverage)}\nLong moving average: {Display(value.Indicators.LongMovingAverage)}\nRelative volume: {Display(value.Indicators.RelativeVolume)}\nRSI: {Display(value.Indicators.Rsi)}\nMACD: {Display(value.Indicators.Macd)}\nVWAP: {Display(value.Indicators.Vwap)}\nFresh news sentiment: {Display(value.Indicators.SentimentAverage)}";
+        RelativeVolume = value.Indicators?.RelativeVolume is double volume ? $"{volume:F2}x" : "Unavailable";
         SignalDetails = value.Signals.Count == 0 ? "Signals were not calculated." : string.Join("\n", value.Signals.Select(signal =>
             $"{signal.Name}: value {Display(signal.Value)} x weight {signal.Weight:F2} = {Display(signal.Contribution)}"));
         NewsDetails = value.News?.Items.Count > 0
@@ -337,6 +416,9 @@ public sealed class StockRow(
     {
         ResetFlashes();
         Price = ExtendedSession = PreMarketGrid = Technical = TechnicalRange = Confidence = "Unavailable";
+        currentPrice = null;
+        UpdateHoldingMetrics();
+        RelativeVolume = "Unavailable";
         OvernightGrid = SessionGridText(lastOvernight?.Price, lastOvernight?.Change, lastOvernight?.Percent, null);
         AfterHoursGrid = SessionGridText(lastAfterHours?.Price, lastAfterHours?.Change, lastAfterHours?.Percent, null);
         ModelResult = "Unavailable";
@@ -347,6 +429,18 @@ public sealed class StockRow(
         SourceDetails = IndicatorDetails = SignalDetails = NewsDetails = "Not available because live-data validation failed.";
         ModelDetails = "No local-model review was requested because the validated baseline was unavailable.";
         WarningDetails = FinalReason = message;
+    }
+
+    private void UpdateHoldingMetrics()
+    {
+        if (currentPrice is not double priceValue || Quantity is not decimal quantityValue)
+        {
+            HoldingValue = EstimatedGainLoss = "Unavailable";
+            return;
+        }
+        var value = quantityValue * (decimal)priceValue;
+        HoldingValue = value.ToString("C2");
+        EstimatedGainLoss = AverageCost is decimal cost ? (value - quantityValue * cost).ToString("+$#,##0.00;-$#,##0.00;$0.00") : "Unavailable";
     }
 
     private static void UpdateFlash(double? currentValue, ref double? previousValue, Action<Brush> setBrush)

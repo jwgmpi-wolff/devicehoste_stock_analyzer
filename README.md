@@ -104,6 +104,12 @@ If Yahoo Finance is unreachable, throttles the device, changes its response cont
 
 Entering a valid symbol and tapping the add icon saves it to the device watchlist. Use the pencil icon on a stock card to log positive whole or fractional shares and an optional nonnegative average cost. Use the trash icon to remove one symbol, or the clear-watchlist icon in the top bar to remove all symbols. Destructive actions require confirmation.
 
+Use **Import Fidelity** to load a Fidelity Portfolio Positions CSV as the primary portfolio snapshot. Positions for the same symbol across accounts are combined by summing quantity and total cost basis; cash/core rows are skipped. A later Fidelity import replaces prior Fidelity-imported positions while preserving unrelated manual and Coinbase-only rows.
+
+Use **Add Coinbase** to load a Coinbase transaction-history CSV as an additive crypto source. Transactions are replayed chronologically, fees are included in acquisition cost, and remaining quantity uses estimated weighted-average cost. Crypto assets map to market symbols such as `BTC-USD` and `USDC-USD`. Coinbase cannot overwrite a symbol owned by the primary Fidelity snapshot.
+
+Imported cost basis remains fixed until the next import. Current price comes from live market data, then the app calculates live holding value and estimated unrealized gain/loss. Relative volume comes from the validated candle set and remains unavailable when the provider does not return enough current data. Imported values are estimates, not tax-lot accounting.
+
 Watchlist and holding records are stored only in Android DataStore for this app. They are not uploaded to the market-data proxy and do not affect prediction scoring. A live holding value is displayed only when a real validated quote is available; otherwise no value is estimated. Reinstalling with `adb install -r` preserves this data, while uninstalling or clearing app storage removes it.
 
 ## Prediction model

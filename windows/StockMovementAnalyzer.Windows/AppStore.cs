@@ -13,7 +13,8 @@ public sealed record SavedRow(
     double? LastOvernightPercent = null,
     double? LastAfterHoursPrice = null,
     double? LastAfterHoursChange = null,
-    double? LastAfterHoursPercent = null);
+    double? LastAfterHoursPercent = null,
+    string? HoldingSource = null);
 public sealed record AppSettings(string OllamaEndpoint, string? Model, bool UseLocalModel, string FinnhubApiKey, List<SavedRow> Rows);
 
 public sealed class AppStore
@@ -68,7 +69,8 @@ public sealed class AppStore
                         ReadDouble(row, "LastOvernightPercent"),
                         ReadDouble(row, "LastAfterHoursPrice"),
                         ReadDouble(row, "LastAfterHoursChange"),
-                        ReadDouble(row, "LastAfterHoursPercent")));
+                        ReadDouble(row, "LastAfterHoursPercent"),
+                        ReadString(row, "HoldingSource")));
                 }
             }
             return new AppSettings(endpoint, model, useLocalModel, finnhubApiKey.Trim(), rows);

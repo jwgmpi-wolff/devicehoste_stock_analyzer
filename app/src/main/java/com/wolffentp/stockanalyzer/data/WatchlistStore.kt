@@ -22,6 +22,7 @@ data class WatchlistEntry(
     val symbol: String,
     val quantity: Double? = null,
     val averageCost: Double? = null,
+    val holdingSource: String? = null,
     val lastOvernight: StoredSessionSnapshot? = null,
     val lastAfterHours: StoredSessionSnapshot? = null,
 )

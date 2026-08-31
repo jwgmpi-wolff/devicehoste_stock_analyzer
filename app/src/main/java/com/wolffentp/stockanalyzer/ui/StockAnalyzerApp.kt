@@ -1,5 +1,7 @@
 package com.wolffentp.stockanalyzer.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -57,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -114,6 +117,23 @@ private fun Dashboard(state: StockUiState, model: StockViewModel) {
     var confirmClear by remember { mutableStateOf(false) }
     var configureModel by remember { mutableStateOf(false) }
     var tableMode by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val coinbaseCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val csv = uri?.let { selected ->
+            runCatching {
+                context.contentResolver.openInputStream(selected)?.bufferedReader()?.use { it.readText() }
+            }.getOrNull()
+        }.orEmpty()
+        if (uri != null) model.importCoinbaseCsv(csv)
+    }
+    val fidelityCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val csv = uri?.let { selected ->
+            runCatching {
+                context.contentResolver.openInputStream(selected)?.bufferedReader()?.use { it.readText() }
+            }.getOrNull()
+        }.orEmpty()
+        if (uri != null) model.importFidelityCsv(csv)
+    }
     Scaffold(topBar = {
         TopAppBar(
             title = { Text("Stock Movement Analyzer") },
@@ -189,6 +209,15 @@ private fun Dashboard(state: StockUiState, model: StockViewModel) {
                         label = { Text("Table") },
                     )
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { fidelityCsvLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain")) }) {
+                        Text("Import Fidelity")
+                    }
+                    TextButton(onClick = { coinbaseCsvLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain")) }) {
+                        Text("Add Coinbase")
+                    }
+                }
+                state.importStatus?.let { Text(it, color = Color(0xFF52625E), fontSize = 13.sp) }
             }
             Spacer(Modifier.height(12.dp))
             if (state.rows.isNotEmpty()) {
@@ -304,7 +333,8 @@ private fun StockTableHeader() {
         TableCell("Technical", 100.dp, FontWeight.Bold)
         TableCell("Projected range", 146.dp, FontWeight.Bold)
         TableCell("Confidence", 92.dp, FontWeight.Bold)
-        TableCell("Holding", 138.dp, FontWeight.Bold)
+        TableCell("Rel. volume", 96.dp, FontWeight.Bold)
+        TableCell("Holding", 250.dp, FontWeight.Bold)
     }
 }
 
@@ -341,7 +371,8 @@ private fun StockTableRow(row: StockRowState, onClick: () -> Unit) {
         TableCell(recommendationLabel(result?.recommendation), 100.dp, FontWeight.Bold, technicalColor)
         TableCell(priceRangeText(result), 146.dp, color = technicalColor)
         TableCell(result?.let { "${it.confidence}%" } ?: "Unavailable", 92.dp, FontWeight.Bold, technicalColor)
-        TableCell(holdingText(row), 138.dp)
+        TableCell(relativeVolumeText(row), 96.dp)
+        TableCell(holdingText(row), 250.dp)
     }
 }
 
@@ -452,6 +483,7 @@ private fun StockGridCard(
             )
             Text(directionLabel(result?.direction), color = color, fontWeight = FontWeight.Bold)
             Text(result?.let { "Confidence ${it.confidence}%" } ?: "Not calculated", color = color)
+            Text(relativeVolumeText(row), color = Color(0xFF3F3F45), fontSize = 13.sp)
             Text(holdingText(row), color = Color(0xFF3F3F45), fontSize = 13.sp)
             Text("Source ${result?.lastDataTimestamp.formatTimestamp()}", color = Color(0xFF606067), fontSize = 12.sp)
             if (row.error != null) Text(row.error, color = color, fontSize = 13.sp)
@@ -786,10 +818,21 @@ private fun holdingText(row: StockRowState): String {
     val quantity = row.quantity ?: return "No holding logged"
     val cost = row.averageCost?.let { " @ ${String.format(Locale.US, "$%,.2f", it)} avg" }.orEmpty()
     val liveValue = row.analysis?.quote?.price?.let { price ->
-        " · Live value ${String.format(Locale.US, "$%,.2f", quantity * price)}"
+        val value = quantity * price
+        val gainLoss = row.averageCost?.let { averageCost ->
+            val gain = value - quantity * averageCost
+            " · Est. gain/loss ${String.format(Locale.US, "$%+,.2f", gain)}"
+        }.orEmpty()
+        " · Live value ${String.format(Locale.US, "$%,.2f", value)}$gainLoss"
     }.orEmpty()
-    return "${quantity.displayNumber()} shares$cost$liveValue"
+    val source = row.holdingSource?.let { " · $it" }.orEmpty()
+    val units = if (row.holdingSource == com.wolffentp.stockanalyzer.data.COINBASE_CSV_SOURCE) "units" else "shares"
+    return "${quantity.displayNumber()} $units$cost$liveValue$source"
 }
+
+private fun relativeVolumeText(row: StockRowState): String = row.analysis?.indicators?.relativeVolume?.let {
+    "${String.format(Locale.US, "%.2f", it)}x"
+} ?: "Unavailable"
 
 private fun Double.displayNumber(): String = String.format(Locale.US, "%.4f", this).trimEnd('0').trimEnd('.')
 
