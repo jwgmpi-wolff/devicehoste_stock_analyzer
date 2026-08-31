@@ -7,6 +7,12 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $projectRoot
 try {
+    $versionMatch = Select-String -Path .\app\build.gradle.kts -Pattern 'versionName\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if (-not $versionMatch) { throw "Could not determine versionName from app/build.gradle.kts." }
+    $appVersion = $versionMatch.Matches[0].Groups[1].Value
+    $releaseDir = ".\releases\$appVersion"
+    New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
     & .\gradlew.bat testDebugUnitTest assembleDebug
     if ($LASTEXITCODE -ne 0) { throw "Android validation failed." }
 
@@ -23,15 +29,15 @@ try {
 
         $architecture = $runtime.Replace('win-', '')
         $publishedExecutable = Join-Path $publishPath 'StockMovementAnalyzer.Windows.exe'
-        Copy-Item $publishedExecutable ".\releases\StockMovementAnalyzer-Windows-$architecture.exe" -Force
-        Copy-Item $publishedExecutable ".\releases\StockMovementAnalyzer-Setup-$architecture.exe" -Force
+        Copy-Item $publishedExecutable "$releaseDir\StockMovementAnalyzer-Windows-$architecture.exe" -Force
+        Copy-Item $publishedExecutable "$releaseDir\StockMovementAnalyzer-Setup-$architecture.exe" -Force
     }
 
-    Copy-Item .\app\build\outputs\apk\debug\app-debug.apk .\releases\StockMovementAnalyzer-debug.apk -Force
+    Copy-Item .\app\build\outputs\apk\debug\app-debug.apk "$releaseDir\StockMovementAnalyzer-debug.apk" -Force
 
     Get-Process -Name 'StockMovementAnalyzer.Windows' -ErrorAction SilentlyContinue | Stop-Process -Force
     $currentArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-    $setupPath = Resolve-Path ".\releases\StockMovementAnalyzer-Setup-$currentArchitecture.exe"
+    $setupPath = Resolve-Path "$releaseDir\StockMovementAnalyzer-Setup-$currentArchitecture.exe"
     $setupProcess = Start-Process $setupPath -ArgumentList '/install', '/silent' -PassThru -Wait
     if ($setupProcess.ExitCode -ne 0) { throw "Windows installation failed with exit code $($setupProcess.ExitCode)." }
 
