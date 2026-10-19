@@ -90,6 +90,22 @@
                                Text="Model options: choose any discovered installed model, or enter an example ID such as qwen3:4b, qwen3:8b, llama3.1:8b, mistral:7b, or phi4:latest after pulling it with Ollama. Entering gpt-5.3-codex maps to qwen3:8b for local execution."/>
                     <TextBlock Foreground="#52625E" TextWrapping="Wrap" Margin="0,4,0,0"
                                Text="Finnhub key is optional and only used as a quote fallback when Yahoo is missing current price/timestamp."/>
+                    <Expander Header="Provider API keys" Margin="0,8,0,0">
+                        <StackPanel>
+                            <WrapPanel>
+                                <ComboBox Width="170" ItemsSource="{Binding ProviderApiKeys}" DisplayMemberPath="Name"
+                                          SelectedItem="{Binding SelectedProviderKey}" ToolTip="Saved providers"/>
+                                <TextBox x:Name="ProviderNameInput" Width="160" ToolTip="New provider name"
+                                         AutomationProperties.Name="Provider name"/>
+                                <PasswordBox x:Name="ProviderKeyInput" Width="200" Padding="8" Margin="4"
+                                             ToolTip="Provider API key" AutomationProperties.Name="Provider API key"/>
+                                <Button Content="Add / update provider" Click="SaveProviderKey_Click"/>
+                                <Button Content="Remove" Click="RemoveProviderKey_Click"/>
+                            </WrapPanel>
+                            <TextBlock Text="Custom keys are stored locally only; adding a key does not connect a new data provider."
+                                       Foreground="#52625E" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Expander>
                 </StackPanel>
             </Grid>
         </Border>

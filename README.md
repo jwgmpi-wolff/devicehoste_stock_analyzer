@@ -62,6 +62,19 @@ It runs the complete Android unit suite, Windows parity/current-evidence/update-
 
 ## Optional proxy adapter
 
+### Saved provider API keys
+
+Windows has a **Provider API keys** section; Android has the same controls in Settings.
+Enter a provider name and API key, then choose **Add / update provider**. On Android,
+choose **Save** to persist the changes (Cancel discards them). Select a saved provider
+on Windows, or choose **Edit** on Android, to update its key; **Remove** deletes an entry.
+Names match case-insensitively when updating. Use the existing Finnhub field for Finnhub.
+
+Custom entries are stored only on the current device, alongside the existing settings;
+they are not synced, encrypted by the app, or sent to a provider. Key input is masked.
+Saving a custom provider does not add a market-data integration or enable cloud AI.
+Yahoo Finance and the existing Finnhub behavior are unchanged.
+
 The repository retains `proxy/` for users who separately choose Finnhub or Alpha Vantage. It is not used by the default app and is not required for free updates.
 
 For local proxy development in PowerShell:

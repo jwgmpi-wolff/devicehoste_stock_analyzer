@@ -230,6 +230,16 @@ try
     var upgraded = store.Load();
     Require(upgraded.Rows.Count == 2 && upgraded.Rows[0] == new SavedRow("MSFT", 12.5m, 310.75m),
         "Previous-version Windows watchlist and holding must load unchanged.");
+    Require(upgraded.ProviderApiKeys.Count == 0, "Previous settings must default to no custom provider keys.");
+    store.Save(upgraded with { ProviderApiKeys = [new("Example provider", "test-only-key"), new("Second provider", "test-only-key-2")] });
+    upgraded = store.Load();
+    Require(upgraded.ProviderApiKeys.SequenceEqual(new ProviderApiKey[]
+        { new("Example provider", "test-only-key"), new("Second provider", "test-only-key-2") }),
+        "Provider names and API keys must survive a settings reload.");
+    store.Save(upgraded with { ProviderApiKeys = [new("Example provider", "updated-test-key")] });
+    upgraded = store.Load();
+    Require(upgraded.ProviderApiKeys.Count == 1 && upgraded.ProviderApiKeys[0].ApiKey == "updated-test-key",
+        "Updated and removed provider keys must persist.");
     var retainedRows = upgraded.Rows.Select(row => row.Symbol == "MSFT"
         ? row with
         {
@@ -246,6 +256,8 @@ try
     Require(retainedSettings.Rows[0].LastOvernightPrice == 320.0 &&
             retainedSettings.Rows[0].LastAfterHoursPrice == 321.0,
         "Last overnight and after-hours snapshots must persist across Windows restarts.");
+    Require(retainedSettings.ProviderApiKeys.SequenceEqual(upgraded.ProviderApiKeys),
+        "Saving other settings must preserve provider keys.");
     var coinbaseRows = retainedSettings.Rows.Select(row => row.Symbol == "MSFT"
         ? row with { HoldingSource = CoinbaseCsvImporter.Source }
         : row).ToList();
@@ -256,6 +268,8 @@ try
     var recovered = store.Load();
     Require(recovered.Rows.Count == 2 && recovered.Rows[0].Symbol == "MSFT",
         "Watchlist must recover from the pre-update backup.");
+    Require(recovered.ProviderApiKeys.SequenceEqual(upgraded.ProviderApiKeys),
+        "Provider keys must recover from the settings backup.");
 }
 finally
 {

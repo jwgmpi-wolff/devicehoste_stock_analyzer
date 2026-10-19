@@ -12,6 +12,7 @@ import com.wolffentp.stockanalyzer.data.FIDELITY_CSV_SOURCE
 import com.wolffentp.stockanalyzer.data.FidelityCsvImporter
 import com.wolffentp.stockanalyzer.data.ModelReview
 import com.wolffentp.stockanalyzer.data.ModelSettings
+import com.wolffentp.stockanalyzer.data.ProviderApiKey
 import com.wolffentp.stockanalyzer.data.ModelSettingsStore
 import com.wolffentp.stockanalyzer.data.DataStoreModelSettingsStore
 import com.wolffentp.stockanalyzer.data.OllamaModelAnalysisProvider
@@ -37,6 +38,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.Inet4Address
+import java.io.IOException
 import java.net.NetworkInterface
 import java.time.Instant
 
@@ -252,11 +254,17 @@ class StockViewModel @JvmOverloads constructor(
         if (enabled) startAutoRefresh()
     }
 
-    fun saveModelSettings(enabled: Boolean, endpoint: String, model: String, finnhubApiKey: String): Boolean {
+    suspend fun saveModelSettings(enabled: Boolean, endpoint: String, model: String, finnhubApiKey: String, providerApiKeys: List<ProviderApiKey>): Boolean {
         val normalizedEndpoint = endpoint.trim().trimEnd('/')
         val normalizedModel = normalizeRequestedModel(model.trim())
         if (enabled && (!normalizedEndpoint.matches(Regex("^https?://[^\\s]+$")) || normalizedModel.isBlank())) return false
-        val settings = ModelSettings(enabled, normalizedEndpoint, normalizedModel.ifBlank { "qwen3:4b" }, finnhubApiKey.trim())
+        val settings = ModelSettings(enabled, normalizedEndpoint, normalizedModel.ifBlank { "qwen3:4b" }, finnhubApiKey.trim(), providerApiKeys)
+        try {
+            modelSettingsStore.save(settings)
+        } catch (error: IOException) {
+            mutableState.update { it.copy(modelStatus = "Could not save settings to device storage.") }
+            return false
+        }
         mutableState.update {
             it.copy(
                 modelSettings = settings,
@@ -264,7 +272,6 @@ class StockViewModel @JvmOverloads constructor(
                 modelOptions = mergedOptions(it.modelOptions, listOf(settings.model).filter(String::isNotBlank)),
             )
         }
-        viewModelScope.launch { modelSettingsStore.save(settings) }
         refresh()
         return true
     }

@@ -28,6 +28,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string finnhubApiKey = "d9k5sapr01qkjjrs460gd9k5sapr01qkjjrs4610";
     private bool useLocalModel = true;
     private StockRow? selectedRow;
+    private ProviderApiKey? selectedProviderKey;
 
     public MainWindow(string? fidelityImportPath = null, string? coinbaseImportPath = null)
     {
@@ -40,6 +41,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SelectedModel = settings.Model;
         FinnhubApiKey = settings.FinnhubApiKey;
         UseLocalModel = settings.UseLocalModel;
+        foreach (var key in settings.ProviderApiKeys) ProviderApiKeys.Add(key);
         foreach (var row in settings.Rows)
         {
             Rows.Add(new StockRow(
@@ -67,6 +69,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     public ObservableCollection<StockRow> Rows { get; } = [];
+    public ObservableCollection<ProviderApiKey> ProviderApiKeys { get; } = [];
+    public ProviderApiKey? SelectedProviderKey
+    {
+        get => selectedProviderKey;
+        set
+        {
+            Set(ref selectedProviderKey, value);
+            ProviderNameInput.Text = value?.Name ?? "";
+            ProviderKeyInput.Password = value?.ApiKey ?? "";
+        }
+    }
     public ObservableCollection<string> Models { get; } = [];
     public ObservableCollection<string> EndpointOptions { get; } = [];
     public ObservableCollection<string> ModelOptions { get; } = [];
@@ -79,6 +92,42 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string FinnhubApiKey { get => finnhubApiKey; set => Set(ref finnhubApiKey, value); }
     public bool UseLocalModel { get => useLocalModel; set => Set(ref useLocalModel, value); }
     public StockRow? SelectedRow { get => selectedRow; set => Set(ref selectedRow, value); }
+
+    private void SaveProviderKey_Click(object sender, RoutedEventArgs e)
+    {
+        var name = ProviderNameInput.Text.Trim();
+        var key = ProviderKeyInput.Password.Trim();
+        if (name.Length == 0 || key.Length == 0) { Status = "Enter a provider name and API key."; return; }
+        if (name.Equals("Finnhub", StringComparison.OrdinalIgnoreCase)) { Status = "Use the Finnhub field above."; return; }
+        var updated = ProviderApiKeys.Where(item => !item.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
+        updated.Add(new ProviderApiKey(name, key));
+        PersistProviderKeys(updated);
+    }
+
+    private void RemoveProviderKey_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedProviderKey is null) { Status = "Select a saved provider to remove."; return; }
+        PersistProviderKeys(ProviderApiKeys.Where(item => item != SelectedProviderKey).ToList());
+    }
+
+    private void PersistProviderKeys(List<ProviderApiKey> keys)
+    {
+        try
+        {
+            store.Save(CurrentSettings() with { ProviderApiKeys = keys });
+            SelectedProviderKey = null;
+            ProviderApiKeys.Clear();
+            foreach (var key in keys) ProviderApiKeys.Add(key);
+            ProviderNameInput.Clear();
+            ProviderKeyInput.Clear();
+            Status = "Provider API keys saved locally.";
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Status = "Could not save provider API keys.";
+            MessageBox.Show(this, Status, "Provider API keys", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private async void AddSymbol_Click(object sender, RoutedEventArgs e)
     {
@@ -275,7 +324,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         finally { isRefreshing = false; }
     }
 
-    private void Save() => store.Save(new AppSettings(OllamaEndpoint, SelectedModel, UseLocalModel, FinnhubApiKey.Trim(),
+    private void Save() => store.Save(CurrentSettings());
+
+    private AppSettings CurrentSettings() => new(OllamaEndpoint, SelectedModel, UseLocalModel, FinnhubApiKey.Trim(),
         Rows.Select(row => new SavedRow(
             row.Symbol,
             row.Quantity,
@@ -286,7 +337,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             row.LastAfterHoursPrice,
             row.LastAfterHoursChange,
             row.LastAfterHoursPercent,
-            row.HoldingSource)).ToList()));
+            row.HoldingSource)).ToList()) { ProviderApiKeys = ProviderApiKeys.ToList() };
 
     private static string NormalizeRequestedModel(string model)
     {

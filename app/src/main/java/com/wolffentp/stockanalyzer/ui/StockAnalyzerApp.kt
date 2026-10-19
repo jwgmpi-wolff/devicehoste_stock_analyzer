@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -54,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,12 +78,14 @@ import com.wolffentp.stockanalyzer.domain.Horizon
 import com.wolffentp.stockanalyzer.domain.MarketSession
 import com.wolffentp.stockanalyzer.domain.Recommendation
 import com.wolffentp.stockanalyzer.data.ModelSettings
+import com.wolffentp.stockanalyzer.data.ProviderApiKey
 import com.wolffentp.stockanalyzer.data.StoredSessionSnapshot
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 private val AppColors = lightColorScheme(
     primary = Color(0xFF1565C0),
@@ -299,8 +303,8 @@ private fun Dashboard(state: StockUiState, model: StockViewModel) {
             onDismiss = { configureModel = false },
             onFindEndpoints = { model.refreshEndpointOptions() },
             onDiscoverModels = { model.refreshModelOptions() },
-            onSave = { enabled, endpoint, modelName, finnhubApiKey ->
-                model.saveModelSettings(enabled, endpoint, modelName, finnhubApiKey).also { saved ->
+            onSave = { enabled, endpoint, modelName, finnhubApiKey, providerApiKeys ->
+                model.saveModelSettings(enabled, endpoint, modelName, finnhubApiKey, providerApiKeys).also { saved ->
                     if (saved) configureModel = false
                 }
             },
@@ -524,20 +528,26 @@ private fun ModelSettingsDialog(
     onDismiss: () -> Unit,
     onFindEndpoints: () -> Unit,
     onDiscoverModels: () -> Unit,
-    onSave: (Boolean, String, String, String) -> Boolean,
+    onSave: suspend (Boolean, String, String, String, List<ProviderApiKey>) -> Boolean,
 ) {
     var enabled by remember { mutableStateOf(settings.enabled) }
     var endpoint by remember { mutableStateOf(settings.endpoint) }
     var model by remember { mutableStateOf(settings.model) }
     var finnhubApiKey by remember { mutableStateOf(settings.finnhubApiKey) }
+    var providerApiKeys by remember { mutableStateOf(settings.providerApiKeys) }
+    var providerName by remember { mutableStateOf("") }
+    var providerKey by remember { mutableStateOf("") }
+    var providerError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
     var invalid by remember { mutableStateOf(false) }
     var endpointExpanded by remember { mutableStateOf(false) }
     var modelExpanded by remember { mutableStateOf(false) }
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Free local model") },
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("Local model and provider keys") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Use Ollama review", Modifier.weight(1f))
                     Switch(checked = enabled, onCheckedChange = { enabled = it; invalid = false })
@@ -620,13 +630,65 @@ private fun ModelSettingsDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text("Finnhub requires your own key. Its quote API supplies regular quote data, but does not publish a separate overnight field.", fontSize = 13.sp)
+                Text("Provider API keys", fontWeight = FontWeight.SemiBold)
+                Text("Custom keys are saved only on this device. Adding a key does not connect a new data provider.", fontSize = 13.sp)
+                providerApiKeys.forEach { entry ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(entry.name, Modifier.weight(1f))
+                        TextButton(onClick = { providerName = entry.name; providerKey = entry.apiKey }) { Text("Edit") }
+                        TextButton(onClick = { providerApiKeys = providerApiKeys - entry }) { Text("Remove") }
+                    }
+                }
+                OutlinedTextField(
+                    value = providerName,
+                    onValueChange = { providerName = it; providerError = null },
+                    label = { Text("New provider name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = providerKey,
+                    onValueChange = { providerKey = it; providerError = null },
+                    label = { Text("Provider API key") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(onClick = {
+                    when {
+                        providerName.isBlank() || providerKey.isBlank() -> providerError = "Enter a provider name and API key."
+                        providerName.trim().equals("Finnhub", ignoreCase = true) -> providerError = "Use the Finnhub field above."
+                        else -> {
+                            val entry = ProviderApiKey(providerName.trim(), providerKey.trim())
+                            providerApiKeys = providerApiKeys.filterNot { it.name.equals(entry.name, ignoreCase = true) } + entry
+                            providerName = ""
+                            providerKey = ""
+                            providerError = null
+                        }
+                    }
+                }) { Text("Add / update provider") }
+                providerError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Text("Analysis stays on your devices. The validated technical result remains available when Ollama is offline.", fontSize = 13.sp)
+                if (invalid) Text("Settings could not be saved. Check the fields and status above.", color = MaterialTheme.colorScheme.error)
             }
         },
         confirmButton = {
-            TextButton(onClick = { invalid = !onSave(enabled, endpoint, model, finnhubApiKey) }) { Text("Save") }
+            TextButton(enabled = !saving, onClick = {
+                if (providerName.isNotBlank() || providerKey.isNotBlank()) {
+                    providerError = "Add / update the provider before saving."
+                } else {
+                    saving = true
+                    scope.launch {
+                        try {
+                            invalid = !onSave(enabled, endpoint, model, finnhubApiKey, providerApiKeys)
+                        } finally {
+                            saving = false
+                        }
+                    }
+                }
+            }) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } },
     )
 }
 

@@ -7,13 +7,19 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
+@Serializable
+data class ProviderApiKey(val name: String, val apiKey: String)
 
 data class ModelSettings(
     val enabled: Boolean = false,
     val endpoint: String = "",
     val model: String = "qwen3:4b",
     val finnhubApiKey: String = "",
+    val providerApiKeys: List<ProviderApiKey> = emptyList(),
 )
 
 interface ModelSettingsStore {
@@ -28,6 +34,7 @@ class DataStoreModelSettingsStore(private val context: Context) : ModelSettingsS
             endpoint = preferences[ENDPOINT].orEmpty(),
             model = preferences[MODEL] ?: "qwen3:4b",
             finnhubApiKey = preferences[FINNHUB_API_KEY].orEmpty(),
+            providerApiKeys = Json.decodeFromString<List<ProviderApiKey>>(preferences[PROVIDER_API_KEYS] ?: "[]"),
         )
     }
 
@@ -37,6 +44,7 @@ class DataStoreModelSettingsStore(private val context: Context) : ModelSettingsS
             preferences[ENDPOINT] = settings.endpoint.trim().trimEnd('/')
             preferences[MODEL] = settings.model.trim()
             preferences[FINNHUB_API_KEY] = settings.finnhubApiKey.trim()
+            preferences[PROVIDER_API_KEYS] = Json.encodeToString(settings.providerApiKeys)
         }
     }
 
@@ -45,6 +53,7 @@ class DataStoreModelSettingsStore(private val context: Context) : ModelSettingsS
         val ENDPOINT = stringPreferencesKey("ollama_endpoint")
         val MODEL = stringPreferencesKey("ollama_model")
         val FINNHUB_API_KEY = stringPreferencesKey("finnhub_api_key")
+        val PROVIDER_API_KEYS = stringPreferencesKey("provider_api_keys")
     }
 }
 

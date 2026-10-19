@@ -15,7 +15,11 @@ public sealed record SavedRow(
     double? LastAfterHoursChange = null,
     double? LastAfterHoursPercent = null,
     string? HoldingSource = null);
-public sealed record AppSettings(string OllamaEndpoint, string? Model, bool UseLocalModel, string FinnhubApiKey, List<SavedRow> Rows);
+public sealed record ProviderApiKey(string Name, string ApiKey);
+public sealed record AppSettings(string OllamaEndpoint, string? Model, bool UseLocalModel, string FinnhubApiKey, List<SavedRow> Rows)
+{
+    public List<ProviderApiKey> ProviderApiKeys { get; init; } = [];
+}
 
 public sealed class AppStore
 {
@@ -73,7 +77,10 @@ public sealed class AppStore
                         ReadString(row, "HoldingSource")));
                 }
             }
-            return new AppSettings(endpoint, model, useLocalModel, finnhubApiKey.Trim(), rows);
+            var providerApiKeys = root.TryGetProperty("ProviderApiKeys", out var storedKeys)
+                ? storedKeys.Deserialize<List<ProviderApiKey>>() ?? []
+                : [];
+            return new AppSettings(endpoint, model, useLocalModel, finnhubApiKey.Trim(), rows) { ProviderApiKeys = providerApiKeys };
         }
         catch { return null; }
     }
