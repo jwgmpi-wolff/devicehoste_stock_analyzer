@@ -2,6 +2,22 @@
 
 A native Android and Windows app that produces explainable, probabilistic stock movement analysis from current market evidence. An optional Ollama review uses only free models running on hardware you control; no paid or cloud model API is supported. It does not provide financial advice or guaranteed outcomes.
 
+<!-- project-downloads:start -->
+## APK and installer downloads
+
+| Package | Download | Source |
+| --- | --- | --- |
+| Android APK (debug build) | [StockMovementAnalyzer-debug.apk](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-debug.apk) | Git LFS package |
+| Windows installer | [StockMovementAnalyzer-Setup-arm64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Setup-arm64.exe) | Git LFS package |
+| Windows installer | [StockMovementAnalyzer-Setup-x64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Setup-x64.exe) | Git LFS package |
+| Windows executable | [StockMovementAnalyzer-Windows-arm64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Windows-arm64.exe) | Git LFS package |
+| Windows executable | [StockMovementAnalyzer-Windows-x64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Windows-x64.exe) | Git LFS package |
+
+Android may require approval to install apps from this download source. Debug APKs are labeled above. Windows executables that are not setup packages may require accompanying project files; follow the project-specific instructions below.
+
+- [Download the complete source ZIP](https://github.com/jwgmpi-wolff/devicehoste_stock_analyzer/archive/refs/heads/main.zip).
+<!-- project-downloads:end -->
+
 ## Architecture
 
 - `app/`: Kotlin, Jetpack Compose, StateFlow/ViewModel, OkHttp, and Kotlin Serialization.
@@ -183,3 +199,9 @@ Pop-Location
 - Alpha Vantage compact intraday output and Finnhub candle availability may limit coverage.
 - Headline sentiment is a limited contextual signal and does not understand sarcasm, nuance, article bodies, or future events.
 - Live refresh is enabled by default every 60 seconds while this app screen and ViewModel remain active; there is no background worker.
+
+## Copyright
+
+Copyright (c) 2026 Jerry Wolff. See [COPYRIGHT](COPYRIGHT) for the scope of this
+notice. Existing licenses and third-party attribution remain unchanged; this
+notice does not grant additional permissions.
