@@ -5,17 +5,27 @@ A native Android and Windows app that produces explainable, probabilistic stock 
 <!-- project-downloads:start -->
 ## APK and installer downloads
 
-| Package | Download | Source |
+Every available project package is indexed below, including older versions. Prefer the newest stable version for your platform and architecture. Debug APKs and prereleases are labeled; archives are not necessarily standalone installers.
+
+### Repository-hosted packages: all available versions
+
+| Version / source | Package | Download |
 | --- | --- | --- |
-| Android APK (debug build) | [StockMovementAnalyzer-debug.apk](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-debug.apk) | Git LFS package |
-| Windows installer | [StockMovementAnalyzer-Setup-arm64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Setup-arm64.exe) | Git LFS package |
-| Windows installer | [StockMovementAnalyzer-Setup-x64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Setup-x64.exe) | Git LFS package |
-| Windows executable | [StockMovementAnalyzer-Windows-arm64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Windows-arm64.exe) | Git LFS package |
-| Windows executable | [StockMovementAnalyzer-Windows-x64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Windows-x64.exe) | Git LFS package |
+| Git LFS | Android APK (debug) | [releases/1.7.0/StockMovementAnalyzer-debug.apk](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-debug.apk) |
+| Git LFS | Windows installer | [releases/1.7.0/StockMovementAnalyzer-Setup-arm64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Setup-arm64.exe) |
+| Git LFS | Windows installer | [releases/1.7.0/StockMovementAnalyzer-Setup-x64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Setup-x64.exe) |
+| Git LFS | Windows executable | [releases/1.7.0/StockMovementAnalyzer-Windows-arm64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Windows-arm64.exe) |
+| Git LFS | Windows executable | [releases/1.7.0/StockMovementAnalyzer-Windows-x64.exe](https://media.githubusercontent.com/media/jwgmpi-wolff/devicehoste_stock_analyzer/main/releases/1.7.0/StockMovementAnalyzer-Windows-x64.exe) |
 
-Android may require approval to install apps from this download source. Debug APKs are labeled above. Windows executables that are not setup packages may require accompanying project files; follow the project-specific instructions below.
+Git LFS links download the package itself, not a pointer file. Executables without a setup wrapper may require accompanying project files.
 
-- [Download the complete source ZIP](https://github.com/jwgmpi-wolff/devicehoste_stock_analyzer/archive/refs/heads/main.zip).
+### Setup scripts and source
+
+
+- [Download the complete source ZIP](https://github.com/jwgmpi-wolff/devicehoste_stock_analyzer/archive/refs/heads/main.zip). Extract the complete checkout before running setup scripts unless the project instructions explicitly support standalone installation.
+- [Browse all releases and their assets](https://github.com/jwgmpi-wolff/devicehoste_stock_analyzer/releases).
+
+Android may require approval to install apps from the download source. Follow the project-specific installation, signing, checksum, and prerequisite instructions elsewhere in this README.
 <!-- project-downloads:end -->
 
 ## Architecture
